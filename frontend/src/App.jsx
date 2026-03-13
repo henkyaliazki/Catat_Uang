@@ -1,23 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import './index.css';
+import Dashboard from './pages/Dashboard';
 
 // ── Placeholder Pages ───────────────────────────────────────
-
-function Dashboard() {
-  const { waNumber } = useAuth();
-  return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-white mb-2">📊 Dashboard</h1>
-        <p className="text-gray-400">
-          Selamat datang{waNumber ? `, ${waNumber}` : ''}!
-        </p>
-        <p className="text-gray-500 text-sm mt-4">Komponen dashboard akan dibuat di task selanjutnya.</p>
-      </div>
-    </div>
-  );
-}
 
 function LoginPage() {
   return (

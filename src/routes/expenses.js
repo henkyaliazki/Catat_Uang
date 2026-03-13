@@ -49,12 +49,17 @@ router.get('/', authenticateJWT, async (req, res) => {
     const tahun = req.query.tahun ? parseInt(req.query.tahun, 10) : undefined;
     let limit = req.query.limit ? parseInt(req.query.limit, 10) : 50;
     const offset = req.query.offset ? parseInt(req.query.offset, 10) : 0;
+    const kategori = req.query.kategori;
+    const min_jumlah = req.query.min_jumlah ? parseInt(req.query.min_jumlah, 10) : undefined;
+    const max_jumlah = req.query.max_jumlah ? parseInt(req.query.max_jumlah, 10) : undefined;
 
     // Cap limit at 100
     if (limit > 100) limit = 100;
     if (limit < 1) limit = 50;
 
-    const { rows, count } = await getExpenses(req.user.userId, { bulan, tahun, limit, offset });
+    const { rows, count } = await getExpenses(req.user.userId, { 
+      bulan, tahun, limit, offset, kategori, min_jumlah, max_jumlah 
+    });
 
     return res.json({ success: true, data: rows, count, error: null });
   } catch (err) {
@@ -83,6 +88,43 @@ router.get('/rekap', authenticateJWT, async (req, res) => {
     });
   } catch (err) {
     console.error(`[ERROR] ${new Date().toISOString()} GET /expenses/rekap: ${err.message}`);
+    return res.status(500).json({ success: false, data: null, error: 'Internal server error' });
+  }
+});
+
+// ── GET /api/v1/expenses/export ───────────────────────────
+router.get('/export', authenticateJWT, async (req, res) => {
+  try {
+    const now = new Date();
+    const bulan = req.query.bulan ? parseInt(req.query.bulan, 10) : now.getMonth() + 1;
+    const tahun = req.query.tahun ? parseInt(req.query.tahun, 10) : now.getFullYear();
+
+    // Fetch all for export (limit=10000 to ensure we get a whole month)
+    const { rows } = await getExpenses(req.user.userId, { 
+      bulan, tahun, limit: 10000, offset: 0 
+    });
+
+    // CSV Header
+    let csvData = 'Tanggal,Nama,Kategori,Nominal,Sumber\n';
+
+    // CSV Rows
+    rows.forEach(exp => {
+      // Escape commas in string fields by wrapping in quotes
+      const tanggal = new Date(exp.tanggal).toISOString().split('T')[0];
+      const nama = `"${(exp.nama || '').replace(/"/g, '""')}"`;
+      const kategori = `"${(exp.kategori || '').replace(/"/g, '""')}"`;
+      const nominal = exp.jumlah; // raw number for excel
+      const sumber = `"${(exp.sumber || '').replace(/"/g, '""')}"`;
+      
+      csvData += `${tanggal},${nama},${kategori},${nominal},${sumber}\n`;
+    });
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="catatuang-${bulan}-${tahun}.csv"`);
+    
+    return res.send(csvData);
+  } catch (err) {
+    console.error(`[ERROR] ${new Date().toISOString()} GET /expenses/export: ${err.message}`);
     return res.status(500).json({ success: false, data: null, error: 'Internal server error' });
   }
 });

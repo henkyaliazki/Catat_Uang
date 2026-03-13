@@ -47,12 +47,12 @@ async function saveExpenses(userId, items) {
 }
 
 /**
- * Get paginated expenses for a user with optional month/year filter.
+ * Get paginated expenses for a user with optional filters.
  * @param {number} userId
- * @param {{bulan?: number, tahun?: number, limit?: number, offset?: number}} filters
+ * @param {{bulan?: number, tahun?: number, limit?: number, offset?: number, kategori?: string, min_jumlah?: number, max_jumlah?: number}} filters
  * @returns {Promise<{rows: Array, count: number}>}
  */
-async function getExpenses(userId, { bulan, tahun, limit = 50, offset = 0 } = {}) {
+async function getExpenses(userId, { bulan, tahun, limit = 50, offset = 0, kategori, min_jumlah, max_jumlah } = {}) {
   const conditions = ['e.user_id = $1'];
   const params = [userId];
   let idx = 2;
@@ -70,10 +70,37 @@ async function getExpenses(userId, { bulan, tahun, limit = 50, offset = 0 } = {}
     idx++;
   }
 
+  // Filter based on Kategori (array of strings or comma-separated string)
+  if (kategori) {
+    const catArray = typeof kategori === 'string' ? kategori.split(',') : kategori;
+    if (catArray.length > 0) {
+      // Need a subquery or join condition. 
+      // e.category_id IN (SELECT id FROM categories WHERE nama = ANY($X))
+      conditions.push(`c.nama = ANY($${idx})`);
+      params.push(catArray);
+      idx++;
+    }
+  }
+
+  if (min_jumlah !== undefined && min_jumlah !== null && min_jumlah !== '') {
+    conditions.push(`e.jumlah >= $${idx}`);
+    params.push(Number(min_jumlah));
+    idx++;
+  }
+
+  if (max_jumlah !== undefined && max_jumlah !== null && max_jumlah !== '') {
+    conditions.push(`e.jumlah <= $${idx}`);
+    params.push(Number(max_jumlah));
+    idx++;
+  }
+
   const where = conditions.join(' AND ');
 
   const countResult = await pool.query(
-    `SELECT COUNT(*)::int AS total FROM expenses e WHERE ${where}`,
+    `SELECT COUNT(e.id)::int AS total 
+     FROM expenses e 
+     LEFT JOIN categories c ON c.id = e.category_id 
+     WHERE ${where}`,
     params,
   );
 
