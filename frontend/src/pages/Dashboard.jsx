@@ -70,16 +70,18 @@ export default function Dashboard() {
     setLoading(true);
     setError(null);
     try {
-      // 1. Fetch Rekap
+      // 1. Fetch Rekap — params: bulan, tahun (sesuai backend)
       const rekapRes = await client.get('/api/v1/expenses/rekap', {
-        params: { month, year }
+        params: { bulan: month, tahun: year }
       });
+      console.log('[DASHBOARD] Rekap raw response:', rekapRes.data);
       
       let rawRekap = [];
       let totalAmount = 0;
       
       if (rekapRes.data && rekapRes.data.data) {
-        totalAmount = rekapRes.data.total || 0;
+        // Backend returns: { success, data: [...], total_keseluruhan, bulan, tahun }
+        totalAmount = rekapRes.data.total_keseluruhan || 0;
         rawRekap = rekapRes.data.data;
       } else {
         rawRekap = rekapRes.data || [];
@@ -91,7 +93,7 @@ export default function Dashboard() {
         const catValue = item.total || item.amount || 0;
         return {
           name: catName,
-          value: catValue,
+          value: Number(catValue), // Wajib Number() agar Recharts bisa render Pie
           color: CATEGORY_COLORS[catName] || CATEGORY_COLORS["Lainnya"]
         };
       });
@@ -102,8 +104,8 @@ export default function Dashboard() {
         byCategory: chartData
       });
 
-      // 2. Fetch Transactions (limit 20)
-      const queryParams = { limit: 20, month, year };
+      // 2. Fetch Transactions — params: bulan, tahun (sesuai backend)
+      const queryParams = { limit: 20, bulan: month, tahun: year };
       if (selectedCategories.length > 0) {
         queryParams.kategori = selectedCategories.join(',');
       }
@@ -113,6 +115,7 @@ export default function Dashboard() {
       const listRes = await client.get('/api/v1/expenses', {
         params: queryParams
       });
+      console.log('[DASHBOARD] Expenses raw response:', listRes.data?.count, 'items');
       
       let expenses = [];
       if (listRes.data && Array.isArray(listRes.data.data)) {
@@ -332,36 +335,44 @@ export default function Dashboard() {
                   </span>
                 )}
               </div>
-              <button 
-                onClick={() => setIsFilterOpen(!isFilterOpen)}
-                className={`p-1.5 rounded-lg text-sm transition-colors ${isFilterOpen ? 'bg-green-500/20 text-green-400' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
-              >
-                ⚙️ Filter
-              </button>
+              <div className="flex items-center space-x-2">
+                <button 
+                  onClick={fetchDashboardData}
+                  disabled={loading}
+                  className="p-1.5 rounded-lg text-sm bg-gray-800 text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+                  title="Refresh Data"
+                >
+                  <span className={loading ? 'inline-block animate-spin' : 'inline-block'}>🔄</span>
+                </button>
+                <button 
+                  onClick={() => setIsFilterOpen(!isFilterOpen)}
+                  className={`p-1.5 rounded-lg text-sm transition-colors ${isFilterOpen ? 'bg-green-500/20 text-green-400' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+                >
+                  ⚙️ Nominal
+                </button>
+              </div>
             </div>
 
-            {/* Filter Panel */}
+            {/* Quick Filter: Category Chips */}
+            <div className="mb-4 overflow-x-auto whitespace-nowrap flex gap-2 pb-2 scrollbar-hide" style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
+              {Object.keys(CATEGORY_COLORS).map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => toggleCategory(cat)}
+                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 border ${
+                    selectedCategories.includes(cat)
+                      ? 'bg-green-600 border-green-500 text-white shadow-md shadow-green-900/20'
+                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200'
+                  }`}
+                >
+                  {CATEGORY_EMOJIS[cat]} {cat}
+                </button>
+              ))}
+            </div>
+
+            {/* Filter Panel (Min/Max Amount) */}
             {isFilterOpen && (
               <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 mb-4 space-y-4 shadow-lg animate-in slide-in-from-top-2 duration-200">
-                <div>
-                  <label className="text-xs text-gray-400 block mb-2">Kategori</label>
-                  <div className="flex flex-wrap gap-2">
-                    {Object.keys(CATEGORY_COLORS).map(cat => (
-                      <button
-                        key={cat}
-                        onClick={() => toggleCategory(cat)}
-                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 border ${
-                          selectedCategories.includes(cat)
-                            ? 'bg-green-600 border-green-500 text-white shadow-md shadow-green-900/20'
-                            : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200'
-                        }`}
-                      >
-                        {CATEGORY_EMOJIS[cat]} {cat}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                
                 <div className="flex space-x-3">
                   <div className="flex-1">
                     <label className="text-xs text-gray-400 block mb-1">Min Nominal</label>
@@ -422,48 +433,86 @@ export default function Dashboard() {
                   </div>
                 ))
               ) : expenseList.length > 0 ? (
-                expenseList.map((exp, idx) => {
-                  const id = exp.id || exp._id || idx;
-                  const categoryName = exp.kategori || exp.category || "Lainnya";
-                  const emoji = CATEGORY_EMOJIS[categoryName] || "📦";
-                  const tgl = exp.tanggal || exp.date || exp.createdAt;
-                  const nama = exp.nama || exp.name || "Pengeluaran";
-                  const nom = exp.nominal || exp.amount || 0;
-                  
-                  return (
-                    <div key={id} className="flex items-center justify-between bg-gray-800 border border-gray-700/50 p-3 rounded-xl hover:bg-gray-700/50 transition-colors">
-                      <div className="flex items-center space-x-3 overflow-hidden">
-                        <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-xl shrink-0">
-                          {emoji}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="font-medium text-sm text-gray-100 truncate w-32 md:w-40" title={nama}>
-                            {nama}
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            {formatDate(tgl)} • {categoryName}
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center space-x-3 pl-2">
-                        <div className="font-semibold text-sm text-rose-400 whitespace-nowrap">
-                          {formatCurrency(nom)}
-                        </div>
-                        <button 
-                          onClick={() => handleDelete(id, nama, nom)}
-                          className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors cursor-pointer flex-shrink-0"
-                          title="Hapus transaksi"
-                        >
-                          🗑️
-                        </button>
+                (() => {
+                  // Group transactions by Date
+                  const grouped = expenseList.reduce((acc, exp) => {
+                    const tgl = exp.tanggal || exp.date || exp.createdAt;
+                    const dateObj = new Date(tgl);
+                    let dateKey = dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+                    
+                    // Simple "Hari Ini" check
+                    const today = new Date();
+                    if (dateObj.toDateString() === today.toDateString()) {
+                      dateKey = "Hari Ini";
+                    }
+
+                    if (!acc[dateKey]) acc[dateKey] = [];
+                    acc[dateKey].push(exp);
+                    return acc;
+                  }, {});
+
+                  return Object.entries(grouped).map(([dateLabel, items]) => (
+                    <div key={dateLabel} className="mb-4">
+                      <h4 className="text-xs font-semibold text-gray-400 mb-2 mt-4 flex items-center">
+                        <span className="bg-gray-800 px-3 py-1 rounded-full border border-gray-700">{dateLabel}</span>
+                      </h4>
+                      <div className="space-y-2">
+                        {items.map((exp, idx) => {
+                          const id = exp.id || exp._id || idx;
+                          const categoryName = exp.kategori || exp.category || "Lainnya";
+                          const emoji = CATEGORY_EMOJIS[categoryName] || "📦";
+                          const nama = exp.nama || exp.name || "Pengeluaran";
+                          const nom = exp.jumlah || exp.nominal || exp.amount || 0;
+                          
+                          return (
+                            <div key={id} className="flex items-center justify-between bg-gray-800 border border-gray-700/50 p-3 rounded-xl hover:bg-gray-700/50 transition-colors">
+                              <div className="flex items-center space-x-3 overflow-hidden">
+                                <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-xl shrink-0">
+                                  {emoji}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="font-medium text-sm text-gray-100 truncate w-32 md:w-36" title={nama}>
+                                    {nama}
+                                  </div>
+                                  <div className="text-xs text-gray-400 truncate w-32 md:w-36">
+                                    {categoryName}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center space-x-2 pl-2">
+                                <div className="font-semibold text-sm text-rose-400 whitespace-nowrap">
+                                  {formatCurrency(nom)}
+                                </div>
+                                <button 
+                                  onClick={() => handleDelete(id, nama, nom)}
+                                  className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors cursor-pointer flex-shrink-0"
+                                  title="Hapus transaksi"
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-                  );
-                })
+                  ));
+                })()
               ) : (
-                <div className="text-center py-8 text-gray-500 text-sm bg-gray-800/30 rounded-xl border border-gray-800 border-dashed">
-                  Belum ada transaksi di bulan ini.
+                <div className="text-center py-10 px-4 bg-gray-800/30 rounded-2xl border border-gray-800 border-dashed">
+                  <div className="text-5xl mb-4 opacity-50">💸</div>
+                  <h3 className="text-gray-300 font-medium mb-1">Pencatatan Kosong</h3>
+                  <p className="text-gray-500 text-sm mb-5">Belum ada pengeluaran di bulan ini. Yuk mulai catat pengeluaranmu!</p>
+                  <a 
+                    href="https://wa.me/" 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="inline-flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-500 text-white text-sm font-medium py-2 px-5 rounded-xl transition-colors"
+                  >
+                    <span>💬</span>
+                    <span>Catat via WhatsApp</span>
+                  </a>
                 </div>
               )}
             </div>

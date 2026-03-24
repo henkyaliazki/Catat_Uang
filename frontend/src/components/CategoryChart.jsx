@@ -16,13 +16,13 @@ export default function CategoryChart({ data }) {
   };
 
   return (
-    <div className="h-64 w-full mt-4">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="w-full mt-4" style={{ height: 320 }}>
+      <ResponsiveContainer width="100%" height={320}>
         <PieChart>
           <Pie
             data={data}
             cx="50%"
-            cy="45%"
+            cy="40%"
             innerRadius={60}
             outerRadius={80}
             paddingAngle={2}
@@ -33,7 +33,10 @@ export default function CategoryChart({ data }) {
             ))}
           </Pie>
           <Tooltip formatter={formatTooltip} />
-          <Legend verticalAlign="bottom" height={36} />
+          <Legend 
+            verticalAlign="bottom" 
+            wrapperStyle={{ paddingTop: '20px', fontSize: '11px' }} 
+          />
         </PieChart>
       </ResponsiveContainer>
     </div>

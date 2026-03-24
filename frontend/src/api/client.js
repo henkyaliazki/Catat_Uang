@@ -1,7 +1,9 @@
 import axios from 'axios';
 
 const client = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
+  // Jika VITE_API_URL diset: pakai URL itu (production)
+  // Jika tidak diset: pakai '' (relative URL → lewat Vite proxy, bebas CORS di dev)
+  baseURL: import.meta.env.VITE_API_URL ?? '',
 });
 
 /**
